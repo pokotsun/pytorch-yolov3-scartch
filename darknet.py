@@ -55,6 +55,23 @@ class Upsample(nn.Module):
         super(Upsample, self).__init__()
         self.stride = stride
 
+class Darknet(nn.Module):
+    def __init__(self, cfgfile):
+        super(Darknet, self).__init__()
+        self.blocks = parse_cfg(cfgfile)
+        self.net_info, self.module_list = create_modules(self.blocks)
+        #self.header = torch.IntTensor([0, 0, 0, 0])
+        #self.seen = 0
+
+    def forward(self, x, CUDA):
+        modules = self.blocks[1:]
+        outputs = {} # we cache the outputs for the route layer
+        # key: layer index, value: output feature map
+
+        
+
+
+
 def create_modules(blocks):
     net_info = blocks[0] # capture the information about the input and pre-processing
     module_list = nn.ModuleList()
