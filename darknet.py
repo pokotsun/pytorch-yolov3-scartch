@@ -5,6 +5,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
 import numpy as np
+from util import *
 
 
 def parse_cfg(cfgfile):
@@ -67,6 +68,74 @@ class Darknet(nn.Module):
         modules = self.blocks[1:]
         outputs = {} # we cache the outputs for the route layer
         # key: layer index, value: output feature map
+
+        # predict_transform cannot concatenate empty tensor
+        # so, write is False first feature map have not been output 
+        write = False
+
+        for i in range(len(modules)):
+            
+            module_type = (modules[i]["type"])
+            if module_type in ("convolutional", "upsample", "maxpool"):
+                x = self.module_list[i](x)
+                outputs[i] = x
+
+            elif module_type == "route":
+                layers = [int(a) for a in modules[i]["layers"]]
+                
+                # NOTICE this calculate is needed?
+                if layers[0] > 0:
+                    layers[0] = layers[0] - i
+
+                if len(layers) == 1:
+                    x = outputs[i + layers[0]]
+
+                else:
+                    if layers[1] > 0:
+                        layers[1] = layers[1] - i
+
+                    map1 = outputs[i + layers[0]]
+                    map2 = outputs[i + layers[1]]
+
+                    x = torch.cat((map1, map2), 1)
+                outputs[i] = x
+
+            elif module_type == "shortcut":
+                from_ = int(modules[i]["from"])
+                x = outputs[i-1] + outputs[i+from_]
+                outputs[i] = x
+
+            elif module_type == 'yolo':
+                anchors = self.module_list[i][0].anchors
+                # get the input dimensions
+                inp_dim = int(self.net_info["height"])
+
+                # get the number of classes
+                num_classes = int(modules[i]["classes"])
+
+                # output the result
+                x = x.data
+                x = predict_transform(x, inp_dim, anchors, num_classes, CUDA)
+
+                if type(x) == int:
+                    continue
+                
+                if not write:
+                    detections = x
+                    write = True
+                else:
+                    detections = torch.cat((detections, x), 1)
+
+                outputs[i] = outputs[i-1]
+
+        try:
+            return detections
+        except:
+            return 0
+
+
+
+                    
 
         
 
