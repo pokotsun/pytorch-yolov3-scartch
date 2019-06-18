@@ -15,6 +15,7 @@ def parse_cfg(cfgfile):
     network to be built. Block is represented as a dictionary in the list
 
     """
+
     block = {}
     blocks = []
     with open(cfgfile, 'r') as f:
@@ -111,7 +112,7 @@ def create_modules(blocks):
         
         # if it's route layer
         elif x["type"] == "route":
-            x["layers"] = [int(l) for l in x["layers"]]
+            x["layers"] = x["layers"].split(',') 
 
             # start of a route
             start = int(x["layers"][0])
