@@ -7,6 +7,15 @@ from torch.autograd import Variable
 import numpy as np
 from util import *
 
+def get_test_input():
+    img = cv2.imread("dog-cycle-car.png")
+    img = cv2.resize(img, (416, 416))
+    img = img[:,:,::-1].transpose((2,0,1)) # BGR->RGB | HXWC -> CXHXW
+    img = img[np.newaxis, :, :, :]/255.0 # add a channel at 0 (for batch) | Normalize
+    img = torch.from_numpy(img).float() # convert float torch tensor
+    img = Variable(img) # convert to Variable
+    return img
+
 
 def parse_cfg(cfgfile):
     """
@@ -45,16 +54,29 @@ class DetectionLayer(nn.Module):
         super(DetectionLayer, self).__init__()
         self.anchors = anchors
 
-    #def forward(self, x, inp_dim, num_classes, confidence):
-    #    x = x.data
-    #    global CUDA
-    #    prediction = x
-    #    prediction = predict_transform(prediction, inp_dim, self.anchors,)
+    def forward(self, x, inp_dim, num_classes, confidence):
+        x = x.data
+        global CUDA
+        prediction = x
+        prediction = predict_transform(prediction, inp_dim, self.anchors, num_classes, confidence, CUDA)
+        return prediction
 
 class Upsample(nn.Module):        
     def __init__(self, stride=2):
         super(Upsample, self).__init__()
         self.stride = stride
+
+    def forward(self, x):
+        stride = self.stride
+        assert(x.data.dim() == 4)
+        B = x.data.size(0)
+        C = x.data.size(1)
+        H = x.data.size(2)
+        W = x.data.size(3)
+        ws = stride
+        hs = stride
+        x = x.view(B, C, H, 1, W, 1).expand(B, C, H, stride, W, stride).contiguous().view(B, C, H*stride, W*stride)
+        return x
 
 class Darknet(nn.Module):
     def __init__(self, cfgfile):
@@ -77,6 +99,7 @@ class Darknet(nn.Module):
             
             module_type = (modules[i]["type"])
             if module_type in ("convolutional", "upsample", "maxpool"):
+                print(f"module_type: {module_type}")
                 x = self.module_list[i](x)
                 outputs[i] = x
 

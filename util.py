@@ -27,6 +27,7 @@ bbox_attrs: [double, double, double, double, double]
 def predict_transform(prediction, inp_dim, anchors, num_classes, CUDA=True):
     batch_size = prediction.size(0)
     stride = inp_dim // prediction.size(2)
+    grid_size = inp_dim // stride
     bbox_attrs = 5 + num_classes
     num_anchors = len(anchors)
 
@@ -35,7 +36,7 @@ def predict_transform(prediction, inp_dim, anchors, num_classes, CUDA=True):
 
     # tensor shape to (batch_size, bbox_attrs * num_anchors, grid_size * grid_size)
     prediction = prediction.view(batch_size, bbox_attrs * num_anchors, grid_size * grid_size) 
-    prediction = prediction.transpose(1, 2).contiguous() # transpose dim 1 and dim 2, and on memory 
+    prediction = prediction.transpose(1, 2).contiguous() # transpose dim 1 and dim 2, on memory 
     # tensor shape to (batch_size, grid_size * grid_size * num_anchors, bbox_attrs)
     prediction = prediction.view(batch_size, grid_size * grid_size * num_anchors, bbox_attrs)
 
@@ -76,7 +77,7 @@ def predict_transform(prediction, inp_dim, anchors, num_classes, CUDA=True):
           [0., 1.],
          ...
     """
-    x_y_offset = torch.cat((x_offset, y_offset), 1).repeat(1, num_anchors).view(-1, 2).unsqueese(0)
+    x_y_offset = torch.cat((x_offset, y_offset), 1).repeat(1, num_anchors).view(-1, 2).unsqueeze(0)
 
     prediction[:,:,:2] += x_y_offset
 
@@ -84,7 +85,7 @@ def predict_transform(prediction, inp_dim, anchors, num_classes, CUDA=True):
     anchors = torch.FloatTensor(anchors)
     
     if CUDA:
-        anchors = anchors.cuda
+        anchors = anchors.cuda()
 
     anchors = anchors.repeat(grid_size * grid_size, 1).unsqueeze(0)
     prediction[:,:,2:4] = torch.exp(prediction[:,:,2:4]) * anchors
