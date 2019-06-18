@@ -156,12 +156,88 @@ class Darknet(nn.Module):
         except:
             return 0
 
+    
+    def load_weights(self, weight_file):
+        # open the weights file
+        with open(weight_file, 'rb') as f:
+            # the first 4 value are header information
+            # 1. major version number
+            # 2. minor version number
+            # 3. subversion number
+            # 4. images seen
+            header = np.fromfile(f, dtype=np.int32, count=5)
+            self.header = torch.from_numpy(header)
+            self.seen = self.header[3]
 
+            # the rest of the values are the weights 
+            weights = np.fromfile(f, dtype=np.float32)
 
-                    
+            ptr = 0
+            for i in range(len(self.module_list)):
+                module_type = self.blocks[i + 1]["type"]
+                
+                if module_type == "convolutional":
+                    model = self.module_list[i]
+                    try:
+                        batch_normalize = int(self.blocks[i+1]["batch_normalize"])
+                    except:
+                        batch_normalize = 0
 
-        
+                    conv = model[0]
 
+                    if batch_normalize:
+                        bn = model[1]
+
+                        # get the number of weights of batch norm layer
+                        num_bn_biases = bn.bias.numel()
+
+                        # load the weights
+                        bn_biases = torch.from_numpy(weights[ptr: ptr + num_bn_biases])
+                        ptr += num_bn_biases
+
+                        bn_weights = torch.from_numpy(weights[ptr: ptr + num_bn_biases])
+                        ptr += num_bn_biases
+
+                        bn_running_mean = torch.from_numpy(weights[ptr: ptr + num_bn_biases])
+                        ptr += num_bn_biases
+
+                        bn_running_variance = torch.from_numpy(weights[ptr: ptr + num_bn_biases])
+                        ptr += num_bn_biases
+
+                        # reshape the loaded weights shape of model weights
+                        bn_biases = bn_biases.view_as(bn.bias.data)
+                        bn_weights = bn_weights.view_as(bn.weight.data)
+                        bn_running_mean = bn_running_mean.view_as(bn.running_mean)
+                        bn_running_variance = bn_running_variance.view_as(bn.running_var)
+
+                        # copy the loaded data to model
+                        bn.bias.data.copy_(bn_biases)
+                        bn.weight.data.copy_(bn_biases)
+                        bn.running_mean.copy_(bn_running_mean)
+                        bn.running_var.copy_(bn_running_variance)
+
+                    else: # only conv2d
+                        # number of biases    
+                        num_biases = conv.bias.numel()
+
+                        # load the weights
+                        conv_biases = torch.from_numpy(weights[ptr: ptr + num_biases])
+                        ptr += num_biases
+
+                        # reshape the loaded weights shape of model weights
+                        conv_biases = conv_biases.view_as(conv.bias.data)
+
+                        # finally copy the data
+                        conv.bias.data.copy_(conv_biases)
+
+                    # load the weights for the Convolutional layers
+                    num_conv_weights = conv.weight.numel()
+
+                    # do the same as above for weights
+                    conv_weights = torch.from_numpy(weights[ptr: ptr + num_conv_weights])
+                    ptr += num_conv_weights
+                    conv_weights = conv_weights.view_as(conv.weight.data)
+                    conv.weight.data.copy_(conv_weights)
 
 
 def create_modules(blocks):
