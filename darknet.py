@@ -160,7 +160,7 @@ class Darknet(nn.Module):
     def load_weights(self, weight_file):
         # open the weights file
         with open(weight_file, 'rb') as f:
-            # the first 4 value are header information
+            # the first 4 values are header information
             # 1. major version number
             # 2. minor version number
             # 3. subversion number
