@@ -45,5 +45,9 @@ if __name__ == '__main__':
     nms_thresh = float(args.nms_thresh)
     start = 0
     CUDA = torch.cuda.is_available()
+    
+    
+    
+    
 
 
