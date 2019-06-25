@@ -98,7 +98,7 @@ Return
 ------
 (all true detections) * 
 (index of the image in batch, 4 corner cordinates, 
- objectness-score, score of class with maximum confidence, index of class)
+ objectness-score, score of detected class, index of detected class)
 """
 def write_results(prediction, confidence, num_classes, nms=True, nms_conf = 0.4):
     # only objectness > confidence bboxes are evaluated
@@ -127,30 +127,30 @@ def write_results(prediction, confidence, num_classes, nms=True, nms_conf = 0.4)
         # get the class having maximum score, and the index of that class
         # get rid of num_classes softmax scores
         # add the class index and the class score of class having maximum score
-        # return (scores, indices)
-        max_conf, max_conf_score = torch.max(image_pred[:, 5:5 + num_classes], 1)
-        max_conf = max_conf.float().unsqueeze(1)
-        max_conf_score = max_conf_score.float().unsqueeze(1)
-        seq = (image_pred[:, :5], max_conf, max_conf_score)
+        # return (image_pred, indices, scores)
+        max_conf_indices, max_conf_scores = torch.max(image_pred[:, 5:5 + num_classes], 1)
+        max_conf_indices = max_conf_indices.float().unsqueeze(1)
+        max_conf_scores = max_conf_scores.float().unsqueeze(1)
+        seq = (image_pred[:, :5], max_conf_indices, max_conf_scores)
         image_pred = torch.cat(seq, 1)
 
         """
         image_pred: pytorch tensor
-            [   grid_size * grid_size * num_anchors, 
-                [top-left x, top-left y, bottom-right x, bottom-right y, objectness_score], 
-                most_confidence_class_score, most_confidence_class_idx 
+            [   (grid_size * grid_size * num_anchors) * 
+                [top-left x, top-left y, bottom-right x, bottom-right y, objectness_score, 
+                most_confidence_class_score, most_confidence_class_idx]
             ]
         """
 
         # get rid of the zero entries
         non_zero_indices = (torch.nonzero(image_pred[:,4]))
 
-        # if objectness is zero, continue next batch(image)
-        image_pred_ = image_pred[non_zero_indices.squeeze(), :]
+        # if objectness is zero, removed from image_pred
+        image_pred = image_pred[non_zero_indices.squeeze(), :]
 
         # get the various classes detected in the image
         try:
-            img_class_indices = unique(image_pred_[:,-1]) # -1 holds the class index
+            img_class_indices = unique(image_pred[:,-1]) # -1 holds the class index
         except:
             continue
 
@@ -159,16 +159,16 @@ def write_results(prediction, confidence, num_classes, nms=True, nms_conf = 0.4)
         for img_class_idx in img_class_indices:
             # get the detections with current class
             # if not current class, it will be 0
-            class_mask = image_pred_ * (image_pred_[:, -1] == img_class_idx).float().unsqueeze(1)
+            class_mask = image_pred * (image_pred[:, -1] == img_class_idx).float().unsqueeze(1)
             # it will be not -2 ok
             class_mask_indices = torch.nonzero(class_mask[:, -2]).squeeze() # get indices of nonzero confidence score
             
-            image_pred_class = image_pred_[class_mask_indices].view(-1, 7) # get nonzero anchors and reshape (n, 7)
+            image_pred_class = image_pred[class_mask_indices].view(-1, 7) # get nonzero anchors and reshape (n, 7)
 
             # sort the detections such that the entry with the maximum objectness
             # confidence is at the top
             conf_sort_indices = torch.sort(image_pred_class[:, 4], descending=True)[1]
-            image_pred_class = image_pred_class [conf_sort_indices]
+            image_pred_class = image_pred_class[conf_sort_indices]
             num_image_pred_classes = image_pred_class.size(0) # num of all bounding boxes which something were appeared 
 
             # if NMS has to be done
@@ -192,12 +192,12 @@ def write_results(prediction, confidence, num_classes, nms=True, nms_conf = 0.4)
 
                     # remove the non-zero entries
                     # they are very close to i th bbox on image place
-                    # and around there, i th bbox is the highest objectness score, so remove them
+                    # and around there, i th bbox is the highest objectness score, so remove others
                     non_zero_indices = torch.nonzero(image_pred_class[:, 4]).squeeze()
                     image_pred_class = image_pred_class[non_zero_indices].view(-1, 7)
 
             # concatenate the batch_id of the image to the detection result.
-            # this helps up identify which image does the detection corresponds to
+            # this helps us identify which image does the detection corresponds to
             # we use a linear stracture to hold All the detections from the batch
             # the batch_dim is flattened
             # batch is identified by extra column
