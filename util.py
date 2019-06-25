@@ -7,10 +7,35 @@ from torch.autograd import Variable
 import numpy as np
 import cv2
 
+def letter_box_image(img, inp_dim):
+    '''resize image with unchanged aspect ratio using padding'''
+    img_w, img_h = img.shape[1], img.shape[0]
+    w, h = inp_dim
+    new_w = int(img_w * min(w/img_w, h/img_h))
+    new_h = int(img_h * min(w/img_w, h/img_h))
+    # when enlarge image, INTER_CUBIC is best(a little slow)
+    resized_image = cv2.resize(img, (new_w, new_h), interpolation = cv2.INTER_CUBIC)
+
+    canvas = np.full((h, w, 3), 128)
+    canvas[(h - new_h)//2:(h-new_h)//2 + new_h, (w-new_w)//2 + new_w, :] = resized_image
+    
+    return canvas
+
+def prep_image(img, inp_dim):
+    """
+    Prepare image for inputting to the neural network
+    OpenCV BGR numpy tensor to Tensorflow RGB Variable 
+    """
+    img = cv2.resize(img, (inp_dim, inp_dim))
+    img = img[:,:,::-1].transpose((2,0,1)).copy() # (h, w, c) to (c, h, w)
+    img = torch.from_numpy(img).float().div(255.0).unsqueeze(0) # convert to torch Tensor and normalize
+    
+    return img
+
 def load_classes(names_file):
     names = []
-    with open('names_file', 'r') as f:
-        names = fp.read().split("\n")[:-1]
+    with open(names_file, 'r') as f:
+        names = f.read().split("\n")[:-1]
     return names
 
 def unique(tensor):
@@ -73,7 +98,7 @@ Return
 (index of the image in batch, 4 corner cordinates, 
  objectness-score, score of class with maximum confidence, index of class)
 """
-def write_results(prediction, confidence, num_classes, nms_conf = 0.4):
+def write_results(prediction, confidence, num_classes, nms=True, nms_conf = 0.4):
     # only objectness > confidence bboxes are evaluated
     conf_mask = (prediction[:,:,4] > confidence).float().unsqueeze(2)
     prediction = prediction * conf_mask
@@ -123,7 +148,7 @@ def write_results(prediction, confidence, num_classes, nms_conf = 0.4):
 
         # get the various classes detected in the image
         try:
-            img_class_indices = unique(image_pred_[:,-1]).long()).half() # -1 holds the class index
+            img_class_indices = unique(image_pred_[:,-1]) # -1 holds the class index
         except:
             continue
 
@@ -151,7 +176,7 @@ def write_results(prediction, confidence, num_classes, nms_conf = 0.4):
                     # get the IoUs of all boxes that come after the one we are looking at
                     # in the loop
                     try:
-                        ious = bbox_iou(image_pred_class[i].unsqueeze(0), [i+1:])
+                        ious = bbox_iou(image_pred_class[i].unsqueeze(0), image_pred_class[i+1:])
 
                     except ValueError:
                         break
@@ -175,8 +200,8 @@ def write_results(prediction, confidence, num_classes, nms_conf = 0.4):
             # the batch_dim is flattened
             # batch is identified by extra column
 
-            #batch_indices =image_pred_class.new(image_pred_class.size(0), 1).fill_(batch_idx)
-            batch_indices =image_pred_class.new_fill((image_pred_class.size(0), 1), batch_idx)
+            batch_indices =image_pred_class.new(image_pred_class.size(0), 1).fill_(batch_idx)
+            #batch_indices =image_pred_class.new_fill((image_pred_class.size(0), 1), batch_idx)
             seq = batch_indices, image_pred_class
 
             if not write:
