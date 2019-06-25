@@ -1,2 +1,4 @@
 *.png
 *.weights
+det/
+imgs/

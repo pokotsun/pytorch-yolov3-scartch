@@ -196,11 +196,11 @@ if __name__ == '__main__':
         cv2.putText(img, label, (c1[0], c1[1] + t_size[1] + 1), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (150, 150, 150), thickness=1)
         return img
     
-    map(lambda x: write(x, loaded_images, colors[int(x[-1])]), outputs)
+    list(map(lambda x: write(x, loaded_images, colors[int(x[-1])]), outputs))
 
     det_names = pd.Series(imlist).apply(lambda x: "{}/det_{}".format(args.det, x.split("/")[-1]))
 
-    map(cv2.imwrite, det_names, loaded_images)
+    list(map(cv2.imwrite, det_names, loaded_images))
 
     end = time.time()
 
