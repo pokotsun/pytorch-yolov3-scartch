@@ -7,7 +7,8 @@ from torch.autograd import Variable
 import numpy as np
 import cv2
 
-def letter_box_image(img, inp_dim):
+# resize and padding for not changing aspect ratio
+def letterbox_image(img, inp_dim):
     '''resize image with unchanged aspect ratio using padding'''
     img_w, img_h = img.shape[1], img.shape[0]
     w, h = inp_dim
@@ -17,7 +18,7 @@ def letter_box_image(img, inp_dim):
     resized_image = cv2.resize(img, (new_w, new_h), interpolation = cv2.INTER_CUBIC)
 
     canvas = np.full((h, w, 3), 128)
-    canvas[(h - new_h)//2:(h-new_h)//2 + new_h, (w-new_w)//2 + new_w, :] = resized_image
+    canvas[(h - new_h)//2:(h-new_h)//2 + new_h, (w-new_w)//2:(w-new_w)//2 + new_w, :] = resized_image
     
     return canvas
 
@@ -26,7 +27,8 @@ def prep_image(img, inp_dim):
     Prepare image for inputting to the neural network
     OpenCV BGR numpy tensor to Tensorflow RGB Variable 
     """
-    img = cv2.resize(img, (inp_dim, inp_dim))
+    #img = cv2.resize(img, (inp_dim, inp_dim), interpolation=cv2.INTER_CUBIC)
+    img = (letterbox_image(img, (inp_dim, inp_dim)))
     img = img[:,:,::-1].transpose((2,0,1)).copy() # (h, w, c) to (c, h, w)
     img = torch.from_numpy(img).float().div(255.0).unsqueeze(0) # convert to torch Tensor and normalize
     

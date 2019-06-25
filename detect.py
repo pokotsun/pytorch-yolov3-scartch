@@ -12,6 +12,7 @@ import os.path as osp
 from darknet import Darknet
 import pickle as pkl
 import pandas as pd
+import colorsys
 import random
 
 
@@ -144,7 +145,6 @@ if __name__ == '__main__':
         else:
             output = torch.cat((output, prediction))
 
-        print(output)
         for im_num, image in enumerate(imlist[i*batch_size: min((i+1) * batch_size, len(imlist))]):
             im_id = i * batch_size + im_num
             objs = [classes[int(x[-1])] for x in output if int(x[0] == im_id)] 
@@ -178,7 +178,12 @@ if __name__ == '__main__':
     output_recast = time.time()
 
     class_load = time.time()
-    colors = pkl.load(open("pallete", "rb"))
+    hsv_tuples = [(x / num_classes, 1., 1.) for x in range(num_classes)]
+    colors = list(map(lambda x: colorsys.hsv_to_rgb(*x), hsv_tuples))
+    colors = list(map(lambda x: (int(x[0] * 255), int(x[1] * 255), int(x[2] * 255)), colors))
+    np.random.seed(18782)
+    np.random.shuffle(colors)
+    np.random.seed(None) # reset seed to default.
 
     draw = time.time()
 
@@ -187,7 +192,7 @@ if __name__ == '__main__':
         c2 = tuple(x[3:5].int())
         img = results[int(x[0])]
         cls = int(x[-1])
-        label = "{0}.format(classes[cls])"
+        label = "{0}".format(classes[cls])
         cv2.rectangle(img, c1, c2, color, 1) # draw rectangle
         t_size = cv2.getTextSize(label, cv2.FONT_HERSHEY_PLAIN, 1, 1)[0]
         c2 = c1[0] + t_size[0] + 3, c1[1] + t_size[1] + 4
@@ -195,16 +200,16 @@ if __name__ == '__main__':
         cv2.putText(img, label, (c1[0], c1[1] + t_size[1] + 4), cv2.FONT_HERSHEY_PLAIN, 1, [225, 225, 225], 1)
         return img
     
-    list(map(lambda x: write(x, loaded_ims), output))
+    list(map(lambda x: write(x, loaded_ims, colors[int(x[-1])]), output))
 
-    det_names = pd.Seriese(imlist).apply(lambda x: "{}/det_{}".format(args.det, x.split("/")[-1]))
+    det_names = pd.Series(imlist).apply(lambda x: "{}/det_{}".format(args.det, x.split("/")[-1]))
 
     list(map(cv2.imwrite, det_names, loaded_ims))
 
     end = time.time()
 
     print("SUMMARY")
-    print("--------------------------------------------")
+    print("---------------------------------------------------------------")
     print("{:25s}".format("Task", "Time Taken (in seconds)"))
     print()
     print("{:25s}: {:2.3f}".format("Reading addresses", load_batch - read_dir))

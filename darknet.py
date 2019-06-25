@@ -39,6 +39,8 @@ def parse_cfg(cfgfile):
                     block = {} # and re-init the block
                 block["type"] = line [1:-1].rstrip() # split '[' and ']'
             else: 
+                #key,value = line.split("=") 
+                #block[key.rstrip()] = value.lstrip()
                 key, value = [ x.strip() for x in line.split("=") ]
                 block[key] = value 
         blocks.append(block) # append last section
@@ -54,29 +56,30 @@ class DetectionLayer(nn.Module):
         super(DetectionLayer, self).__init__()
         self.anchors = anchors
 
-    def forward(self, x, inp_dim, num_classes, confidence):
-        x = x.data
-        global CUDA
-        prediction = x
-        prediction = predict_transform(prediction, inp_dim, self.anchors, num_classes, confidence, CUDA)
-        return prediction
+    #def forward(self, x, inp_dim, num_classes, confidence):
+    #    x = x.data
+    #    global CUDA
+    #    prediction = x
+    #    prediction = predict_transform(prediction, inp_dim, self.anchors, num_classes, confidence, CUDA)
+    #    return prediction
 
-class Upsample(nn.Module):        
-    def __init__(self, stride=2):
-        super(Upsample, self).__init__()
-        self.stride = stride
+#class Upsample(nn.Module):        
+#    def __init__(self, stride=2):
+#        super(Upsample, self).__init__()
+#        self.stride = stride
+#
+#    def forward(self, x):
+#        stride = self.stride
+#        assert(x.data.dim() == 4)
+#        B = x.data.size(0)
+#        C = x.data.size(1)
+#        H = x.data.size(2)
+#        W = x.data.size(3)
+#        ws = stride
+#        hs = stride
+#        x = x.view(B, C, H, 1, W, 1).expand(B, C, H, stride, W, stride).contiguous().view(B, C, H*stride, W*stride)
+#        return x
 
-    def forward(self, x):
-        stride = self.stride
-        assert(x.data.dim() == 4)
-        B = x.data.size(0)
-        C = x.data.size(1)
-        H = x.data.size(2)
-        W = x.data.size(3)
-        ws = stride
-        hs = stride
-        x = x.view(B, C, H, 1, W, 1).expand(B, C, H, stride, W, stride).contiguous().view(B, C, H*stride, W*stride)
-        return x
 
 class Darknet(nn.Module):
     def __init__(self, cfgfile):
@@ -92,19 +95,18 @@ class Darknet(nn.Module):
         # key: layer index, value: output feature map
 
         # predict_transform cannot concatenate empty tensor
-        # so, write is False first feature map have not been output 
+        # so if write is False, first feature map have not been output 
         write = False
 
-        for i in range(len(modules)):
-            
+        for i, module in enumerate(modules):
             module_type = (modules[i]["type"])
+
             if module_type in ("convolutional", "upsample", "maxpool"):
-                print(f"module_type: {module_type}")
                 x = self.module_list[i](x)
-                outputs[i] = x
 
             elif module_type == "route":
-                layers = [int(a) for a in modules[i]["layers"]]
+                layers = module["layers"]
+                layers = [int(a) for a in layers]
                 
                 # NOTICE this calculate is needed?
                 if layers[0] > 0:
@@ -119,14 +121,11 @@ class Darknet(nn.Module):
 
                     map1 = outputs[i + layers[0]]
                     map2 = outputs[i + layers[1]]
-
                     x = torch.cat((map1, map2), 1)
-                outputs[i] = x
 
             elif module_type == "shortcut":
-                from_ = int(modules[i]["from"])
+                from_ = int(module["from"])
                 x = outputs[i-1] + outputs[i+from_]
-                outputs[i] = x
 
             elif module_type == 'yolo':
                 anchors = self.module_list[i][0].anchors
@@ -134,29 +133,23 @@ class Darknet(nn.Module):
                 inp_dim = int(self.net_info["height"])
 
                 # get the number of classes
-                num_classes = int(modules[i]["classes"])
+                num_classes = int(module["classes"])
 
                 # output the result
                 x = x.data
                 x = predict_transform(x, inp_dim, anchors, num_classes, CUDA)
 
-                if type(x) == int:
-                    continue
-                
                 if not write:
                     detections = x
                     write = True
                 else:
                     detections = torch.cat((detections, x), 1)
 
-                outputs[i] = outputs[i-1]
+            outputs[i] = x
 
-        try:
-            return detections
-        except:
-            return 0
+        return detections
 
-    
+
     def load_weights(self, weight_file):
         # open the weights file
         with open(weight_file, 'rb') as f:
@@ -201,20 +194,20 @@ class Darknet(nn.Module):
                         bn_running_mean = torch.from_numpy(weights[ptr: ptr + num_bn_biases])
                         ptr += num_bn_biases
 
-                        bn_running_variance = torch.from_numpy(weights[ptr: ptr + num_bn_biases])
+                        bn_running_var = torch.from_numpy(weights[ptr: ptr + num_bn_biases])
                         ptr += num_bn_biases
 
                         # reshape the loaded weights shape of model weights
                         bn_biases = bn_biases.view_as(bn.bias.data)
                         bn_weights = bn_weights.view_as(bn.weight.data)
                         bn_running_mean = bn_running_mean.view_as(bn.running_mean)
-                        bn_running_variance = bn_running_variance.view_as(bn.running_var)
+                        bn_running_var = bn_running_var.view_as(bn.running_var)
 
                         # copy the loaded data to model
-                        bn.bias.data.copy_(bn_biases)
-                        bn.weight.data.copy_(bn_biases)
-                        bn.running_mean.copy_(bn_running_mean)
-                        bn.running_var.copy_(bn_running_variance)
+                        bn.bias.data.copy_(bn_biases.data)
+                        bn.weight.data.copy_(bn_weights.data)
+                        bn.running_mean.copy_(bn_running_mean.data)
+                        bn.running_var.copy_(bn_running_var.data)
 
                     else: # only conv2d
                         # number of biases    
@@ -236,18 +229,20 @@ class Darknet(nn.Module):
                     # do the same as above for weights
                     conv_weights = torch.from_numpy(weights[ptr: ptr + num_conv_weights])
                     ptr += num_conv_weights
+
                     conv_weights = conv_weights.view_as(conv.weight.data)
                     conv.weight.data.copy_(conv_weights)
 
+    
 
 def create_modules(blocks):
     net_info = blocks[0] # capture the information about the input and pre-processing
     module_list = nn.ModuleList()
-    index = 0 # indexing blocks helps with implementing route layers(skip connections)
     prev_filters = 3
     output_filters = []
 
-    for x in blocks:
+    # indexing blocks helps with implementing route layers(skip connections)
+    for index, x in enumerate(blocks[1:]):
         module = nn.Sequential()  
 
         if x["type"] == "net":
@@ -293,7 +288,7 @@ def create_modules(blocks):
         elif x["type"] == "upsample":
             stride = int(x["stride"])
             upsample = nn.Upsample(scale_factor=2, mode="nearest")
-            module.add_module("leaky_{0}".format(index), upsample)
+            module.add_module("upsample_{0}".format(index), upsample)
         
         # if it's route layer
         elif x["type"] == "route":
