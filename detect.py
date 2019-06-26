@@ -91,15 +91,16 @@ if __name__ == '__main__':
     im_batches = list(map(prep_image, loaded_images, [inp_dim for _ in range(len(imlist))] ))
 
     # list containing dimensions of original images
-    im_dim_list = [(loaded_image.shape[1], loaded_image.shape[0]) for loaded_image in loaded_images] 
-    im_dim_list = torch.FloatTensor(im_dim_list).repeat(1, 2)
-    #print(f"im_dim_list: {im_dim_list.shape}")
+    img_dim_list = [(loaded_image.shape[1], loaded_image.shape[0]) for loaded_image in loaded_images] 
+    #NOTE why repeat?
+    #img_dim_list = torch.FloatTensor(img_dim_list).repeat(1, 2)
+    img_dim_list = torch.FloatTensor(img_dim_list)
 
     if CUDA:
-        im_dim_list = im_dim_list.cuda()
+        img_dim_list = img_dim_list.cuda()
 
     leftover = 0
-    if len(im_dim_list) % batch_size:
+    if len(img_dim_list) % batch_size:
         leftover = 1
 
     if batch_size != 1:
@@ -135,21 +136,22 @@ if __name__ == '__main__':
 
             prediction[:, 0] += i * batch_size # transform the attribute from index in batch to index in imlist
 
-            if not write:
-                outputs = prediction
-                write = True
-            else:
-                outputs = torch.cat((outputs, prediction))
 
             for im_num, image in enumerate(imlist[batch_start:batch_end]):
                 img_idx = batch_start + im_num
-                objs = [classes[int(x[-1])] for x in outputs if int(x[0] == img_idx)] 
+                objs = [classes[int(x[-1])] for x in prediction if int(x[0] == img_idx)] 
                 print("{0:20} predicted in {1:6.3f} seconds".format(image.split("/")[-1], (end - start)/batch_size))
                 print("{0:20} {1:s}".format("Objects Detected:", " ".join(objs)))
                 print("---------------------------------------------------------------")
 
             if CUDA:
                 torch.cuda.synchronize()
+
+            if not write:
+                outputs = prediction
+                write = True
+            else:
+                outputs = torch.cat((outputs, prediction))
 
     # draw BBox to images
     try:
@@ -158,22 +160,32 @@ if __name__ == '__main__':
         print("No detections were made")
         exit()
 
-    im_dim_list = torch.index_select(im_dim_list, 0, outputs[:,0].long())
+    # prepare img_dim for each output
+    """
+    Return [
+        [img_w, img_h],
+        [img_w, img_h],,,
+    ]
+    """
+    img_dim_list = torch.index_select(img_dim_list, 0, outputs[:,0].long())
     
-    scaling_factor = torch.min(inp_dim/im_dim_list, 1)[0].view(-1, 1)
+    # inp_dim: img dim to input to network
+    # torch.min returns value with selected value index, so get only[0], and reshape 
+    scaling_factor = torch.min(inp_dim/img_dim_list, 1)[0].view(-1, 1)
 
-    outputs[:, [1,3]] -= (inp_dim - scaling_factor * im_dim_list[:, 0].view(-1, 1)) / 2
-    outputs[:, [2,4]] -= (inp_dim - scaling_factor * im_dim_list[:, 1].view(-1, 1)) / 2
+    outputs[:, [1,3]] -= (inp_dim - scaling_factor * img_dim_list[:, 0].view(-1, 1)) / 2
+    outputs[:, [2,4]] -= (inp_dim - scaling_factor * img_dim_list[:, 1].view(-1, 1)) / 2
 
     outputs[:, 1:5] /= scaling_factor
 
     for i in range(outputs.shape[0]):
-        outputs[i, [1, 3]] = torch.clamp(outputs[i, [1,3]], 0.0, im_dim_list[i, 0])
-        outputs[i, [2, 4]] = torch.clamp(outputs[i, [2,4]], 0.0, im_dim_list[i, 1])
+        outputs[i, [1, 3]] = torch.clamp(outputs[i, [1,3]], 0.0, img_dim_list[i, 0])
+        outputs[i, [2, 4]] = torch.clamp(outputs[i, [2,4]], 0.0, img_dim_list[i, 1])
 
     output_recast = time.time()
 
     class_load = time.time()
+
     hsv_tuples = [(x / num_classes, 1., 1.) for x in range(num_classes)]
     colors = list(map(lambda x: colorsys.hsv_to_rgb(*x), hsv_tuples))
     colors = list(map(lambda x: (int(x[0] * 200), int(x[1] * 200), int(x[2] * 200)), colors))
@@ -183,10 +195,9 @@ if __name__ == '__main__':
 
     draw = time.time()
 
-    def write(x, results, color):
+    def write(x, img, color):
         c1 = tuple(x[1:3].int())
         c2 = tuple(x[3:5].int())
-        img = results[int(x[0])]
         cls = int(x[-1])
         label = "{0}".format(classes[cls])
         cv2.rectangle(img, c1, c2, color, 4) # draw rectangle
@@ -194,13 +205,17 @@ if __name__ == '__main__':
         c2 = c1[0] + t_size[0] + 3, c1[1] + t_size[1] + 4
         cv2.rectangle(img, c1, c2, color, -1)
         cv2.putText(img, label, (c1[0], c1[1] + t_size[1] + 1), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (150, 150, 150), thickness=1)
-        return img
-    
-    list(map(lambda x: write(x, loaded_images, colors[int(x[-1])]), outputs))
+ 
+    for output in outputs:
+        img = loaded_images[int(output[0])]
+        color = colors[int(output[-1])]
+        write(output, img, color)
 
     det_names = pd.Series(imlist).apply(lambda x: "{}/det_{}".format(args.det, x.split("/")[-1]))
 
-    list(map(cv2.imwrite, det_names, loaded_images))
+    for (det_name, img) in zip(det_names, loaded_images):
+        cv2.imwrite(det_name, img)
+    #list(map(cv2.imwrite, det_names, loaded_images))
 
     end = time.time()
 

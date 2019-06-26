@@ -29,7 +29,7 @@ def prep_image(img, inp_dim):
     """
     #img = cv2.resize(img, (inp_dim, inp_dim), interpolation=cv2.INTER_CUBIC)
     img = (letterbox_image(img, (inp_dim, inp_dim)))
-    img = img[:,:,::-1].transpose((2,0,1)).copy() # (h, w, c) to (c, h, w)
+    img = img[:,:,::-1].transpose((2,0,1)).copy() # (height, width, channel) to (channel, height, weight)
     img = torch.from_numpy(img).float().div(255.0).unsqueeze(0) # convert to torch Tensor and normalize
     
     return img
@@ -120,9 +120,9 @@ def write_results(prediction, confidence, num_classes, nms=True, nms_conf = 0.4)
     # if write=False, output have not been initialized
     write = False
 
-    for batch_idx in range(batch_size):
+    for img_idx in range(batch_size):
         # select the image from the batch
-        image_pred = prediction[batch_idx]
+        image_pred = prediction[img_idx]
 
         # get the class having maximum score, and the index of that class
         # get rid of num_classes softmax scores
@@ -202,8 +202,8 @@ def write_results(prediction, confidence, num_classes, nms=True, nms_conf = 0.4)
             # the batch_dim is flattened
             # batch is identified by extra column
 
-            batch_indices =image_pred_class.new(image_pred_class.size(0), 1).fill_(batch_idx)
-            #batch_indices =image_pred_class.new_fill((image_pred_class.size(0), 1), batch_idx)
+            batch_indices =image_pred_class.new(image_pred_class.size(0), 1).fill_(img_idx)
+            #batch_indices =image_pred_class.new_fill((image_pred_class.size(0), 1), img_idx)
             seq = batch_indices, image_pred_class
 
             if not write:
