@@ -123,7 +123,6 @@ if __name__ == '__main__':
         # B x (bbox cord x No. of anchors) x grid_w x grid_h -> B x bbox x (all the boxes)
         # put every proposed box as a row
 
-        # if volatile = True, not store compute graph
         with torch.no_grad():
             prediction = model(batch, CUDA)
 
@@ -178,6 +177,7 @@ if __name__ == '__main__':
 
     outputs[:, 1:5] /= scaling_factor
 
+    # output range to (0, [w, h])
     for i in range(outputs.shape[0]):
         outputs[i, [1, 3]] = torch.clamp(outputs[i, [1,3]], 0.0, img_dim_list[i, 0])
         outputs[i, [2, 4]] = torch.clamp(outputs[i, [2,4]], 0.0, img_dim_list[i, 1])

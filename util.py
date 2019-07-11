@@ -226,7 +226,7 @@ Parameters
 prediction : pytorch tensor
     output feature map
 inp_dim : int
-    input image
+    input image (w, h)
 anchors : int
 num_classes : int
 

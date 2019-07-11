@@ -99,26 +99,18 @@ class Darknet(nn.Module):
         write = False
 
         for i, module in enumerate(modules):
-            module_type = (modules[i]["type"])
+            module_type = (module["type"])
 
             if module_type in ("convolutional", "upsample", "maxpool"):
                 x = self.module_list[i](x)
 
             elif module_type == "route":
-                layers = module["layers"]
-                layers = [int(a) for a in layers]
-                
-                # NOTICE this calculate is needed?
-                if layers[0] > 0:
-                    layers[0] = layers[0] - i
+                layers = [int(l) for l in module["layers"]]
+                layers = [l - i if l > 0 else l for l in layers] # absolute value to relative value
 
                 if len(layers) == 1:
                     x = outputs[i + layers[0]]
-
                 else:
-                    if layers[1] > 0:
-                        layers[1] = layers[1] - i
-
                     map1 = outputs[i + layers[0]]
                     map2 = outputs[i + layers[1]]
                     x = torch.cat((map1, map2), 1)
@@ -144,6 +136,13 @@ class Darknet(nn.Module):
                     write = True
                 else:
                     detections = torch.cat((detections, x), 1)
+            module_info = module.copy()
+            module_info['output_size'] = f"{x.shape[2]} x {x.shape[3]} x {x.shape[1]}" if len(x.shape) > 3 else f"{x.shape[1]} x {x.shape[2]}"
+            print(module_info)
+            #if len(x.shape) > 3:
+            #    print( f"{x.shape[2]} * {x.shape[3]} * {x.shape[1]}\n")
+            #else:
+            #    print( f"yolo_layer: {x.shape[1]} * {x.shape[2]}" )
 
             outputs[i] = x
 
@@ -197,6 +196,7 @@ class Darknet(nn.Module):
                         bn_running_var = torch.from_numpy(weights[ptr: ptr + num_bn_biases])
                         ptr += num_bn_biases
 
+
                         # reshape the loaded weights shape of model weights
                         bn_biases = bn_biases.view_as(bn.bias.data)
                         bn_weights = bn_weights.view_as(bn.weight.data)
@@ -232,8 +232,6 @@ class Darknet(nn.Module):
 
                     conv_weights = conv_weights.view_as(conv.weight.data)
                     conv.weight.data.copy_(conv_weights)
-
-    
 
 def create_modules(blocks):
     net_info = blocks[0] # capture the information about the input and pre-processing
@@ -348,7 +346,7 @@ def create_modules(blocks):
             print(f'TYPE: {x["type"]}')
             print("Something I dunno")
             assert False
-
+        
         module_list.append(module)
         prev_filters = filters
         output_filters.append(filters)
