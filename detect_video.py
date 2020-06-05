@@ -2,14 +2,14 @@ from __future__ import division
 import time
 import torch
 import torch.nn as nn
-from torch.autogred import Variable
+from torch.autograd import Variable
 import numpy as np
 import cv2
 from util import *
 from darknet import Darknet
 
 import pandas as pd
-import radnom
+import random
 import pickle as pkl
 import argparse
 
@@ -38,6 +38,13 @@ def main():
     args = arg_parse()
     confidence = args.confidence
     nms_thresh = args.nms_thresh
+    start = 0
+    
+    CUDA = torch.cuda.is_available()
+    num_classes = 80
+    bbox_attrs = 5 + num_classes
+
+    print(f"Loading network.....")
 
 if __name__ == '__main__':
     main()

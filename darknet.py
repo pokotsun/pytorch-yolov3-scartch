@@ -138,11 +138,6 @@ class Darknet(nn.Module):
                     detections = torch.cat((detections, x), 1)
             module_info = module.copy()
             module_info['output_size'] = f"{x.shape[2]} x {x.shape[3]} x {x.shape[1]}" if len(x.shape) > 3 else f"{x.shape[1]} x {x.shape[2]}"
-            print(module_info)
-            #if len(x.shape) > 3:
-            #    print( f"{x.shape[2]} * {x.shape[3]} * {x.shape[1]}\n")
-            #else:
-            #    print( f"yolo_layer: {x.shape[1]} * {x.shape[2]}" )
 
             outputs[i] = x
 

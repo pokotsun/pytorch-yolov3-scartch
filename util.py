@@ -116,7 +116,7 @@ def write_results(prediction, confidence, num_classes, nms=True, nms_conf = 0.4)
 
     batch_size = prediction.size(0)
 
-    outputs = prediction.new(1, prediction.size(2) + 1)
+    outputs = None
     # if write=False, output have not been initialized
     write = False
 

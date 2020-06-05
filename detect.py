@@ -128,6 +128,9 @@ if __name__ == '__main__':
 
             prediction = write_results(prediction, confidence, num_classes, nms_conf=nms_thresh)
 
+            if prediction == None:
+                continue
+
             end = time.time()
 
             batch_start = i * batch_size
